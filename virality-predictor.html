@@ -1,0 +1,679 @@
+<title>Opsis Virality Prediktor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sea-blue masthead, then two columns: input "slate" left, result "logbook" right; stacks on phones. */
+:root {
+  --bg: #edf2f3;
+  --surface: #ffffff;
+  --ink: #10222b;
+  --muted: #566a73;
+  --line: #d2dde1;
+  --sea: #0b5d7a;
+  --sea-ink: #ffffff;
+  --sea-soft: #d6eaf1;
+  --good: #2c8553;
+  --warn: #b97f0c;
+  --bad: #be3f2b;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b161b; --surface: #12222a; --ink: #e3edf0; --muted: #8ea4ad; --line: #233840;
+    --sea: #4cb0d2; --sea-ink: #04161d; --sea-soft: #123441;
+    --good: #5cc28a; --warn: #e2ad42; --bad: #ef7a64; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b161b; --surface: #12222a; --ink: #e3edf0; --muted: #8ea4ad; --line: #233840;
+  --sea: #4cb0d2; --sea-ink: #04161d; --sea-soft: #123441;
+  --good: #5cc28a; --warn: #e2ad42; --bad: #ef7a64; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.mast { background: var(--sea); color: var(--sea-ink); margin-top: calc(-1 * env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px); }
+header.mast .wrap { padding-block: 22px 20px; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+header.mast h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 3.2vw, 2.1rem); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+header.mast p { margin: 0; opacity: .85; font-size: .9rem; max-width: 52ch; }
+main.wrap { padding-block: 24px 48px; display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { main.wrap { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; min-width: 0; }
+.panel h2 { font-family: var(--display); font-weight: 600; font-size: 1.15rem; margin: 0 0 14px; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.lbl { display: block; font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; }
+select, textarea, input[type="text"] { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; }
+textarea { min-height: 92px; resize: vertical; }
+select:focus-visible, textarea:focus-visible, input:focus-visible, button:focus-visible, .drop:focus-visible { outline: 2px solid var(--sea); outline-offset: 2px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; padding: 8px 4px; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; font-size: .86rem; font-weight: 500; background: var(--bg); }
+.seg input:checked + label { background: var(--sea); color: var(--sea-ink); border-color: var(--sea); }
+.seg input:focus-visible + label { outline: 2px solid var(--sea); outline-offset: 2px; }
+.drop { border: 1.5px dashed var(--sea); border-radius: 10px; padding: 22px 16px; text-align: center; cursor: pointer; background: var(--sea-soft); }
+.drop.over { border-style: solid; }
+.drop strong { display: block; font-family: var(--display); font-size: 1.05rem; margin-bottom: 2px; }
+.drop span { font-size: .85rem; color: var(--muted); }
+.drop .fname { font-family: var(--mono); font-size: .8rem; color: var(--ink); word-break: break-all; margin-top: 8px; display: block; }
+video.preview { width: 100%; max-height: 260px; border-radius: 8px; background: #000; }
+.btn { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 12px 16px; cursor: pointer; background: var(--sea); color: var(--sea-ink); width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { background: transparent; color: var(--sea); border: 1px solid var(--sea); width: auto; padding: 7px 12px; font-size: .85rem; }
+.note { font-size: .8rem; color: var(--muted); margin: 0; }
+.progress { height: 6px; background: var(--sea-soft); border-radius: 3px; overflow: hidden; }
+.progress > div { height: 100%; width: 0; background: var(--sea); transition: width .2s; }
+.status { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .85rem; color: var(--muted); }
+.banner { font-size: .82rem; background: var(--sea-soft); color: var(--ink); border-radius: 8px; padding: 9px 12px; margin-bottom: 16px; }
+.err { color: var(--bad); font-size: .85rem; margin: 0; }
+
+.summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: center; padding-bottom: 18px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+@media (max-width: 520px) { .summary { grid-template-columns: minmax(0, 1fr); } }
+.dial { width: 132px; height: 132px; position: relative; }
+.dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.dial .num { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 2.6rem; font-variant-numeric: tabular-nums; }
+.dial .num small { display: block; font-family: var(--body); font-size: .7rem; font-weight: 500; color: var(--muted); text-align: center; margin-top: -6px; }
+.verdict h3 { font-family: var(--display); font-size: 1.4rem; margin: 0 0 4px; text-wrap: balance; }
+.verdict p { margin: 0 0 10px; color: var(--muted); max-width: 60ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: .74rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; color: var(--muted); }
+.chip b { color: var(--ink); font-weight: 600; }
+
+.section { margin-top: 22px; }
+.section > h4 { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+.bars { display: grid; gap: 9px; }
+.bar { display: grid; grid-template-columns: minmax(0, 150px) minmax(0, 1fr) 56px; gap: 10px; align-items: center; font-size: .86rem; }
+.bar .track { height: 8px; background: var(--sea-soft); border-radius: 4px; overflow: hidden; }
+.bar .fill { height: 100%; border-radius: 4px; }
+.bar .val { font-family: var(--mono); font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
+.bar .det { grid-column: 1 / -1; font-size: .78rem; color: var(--muted); margin-top: -4px; }
+.fill.good { background: var(--good); } .fill.warn { background: var(--warn); } .fill.bad { background: var(--bad); }
+
+.timeline { overflow-x: auto; }
+.timeline svg { width: 100%; min-width: 420px; height: auto; display: block; }
+.timeline .area { fill: var(--sea-soft); stroke: var(--sea); stroke-width: 1.2; }
+.timeline .hook { fill: var(--warn); opacity: .14; }
+.timeline .cut { stroke: var(--ink); stroke-width: 1; opacity: .55; }
+.timeline .axis { fill: var(--muted); font-family: var(--mono); font-size: 10px; }
+.timeline .base { stroke: var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .76rem; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+.frames { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.frames figure { margin: 0; flex: 0 0 auto; width: 92px; }
+.frames img { width: 92px; height: 140px; object-fit: cover; border-radius: 6px; display: block; background: var(--sea-soft); }
+.frames figcaption { font-family: var(--mono); font-size: .7rem; color: var(--muted); text-align: center; margin-top: 3px; }
+
+.tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tips li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: start; font-size: .9rem; }
+.pill { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; text-align: center; border-radius: 4px; padding: 2px 0; margin-top: 2px; }
+.pill.visok { background: var(--bad); color: var(--surface); }
+.pill.srednji { background: var(--warn); color: var(--surface); }
+.pill.nizak { background: var(--line); color: var(--ink); }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 620px) { .trio { grid-template-columns: minmax(0, 1fr); } }
+.trio > div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.trio .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.trio .v { font-family: var(--display); font-weight: 800; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.trio p { margin: 4px 0 0; font-size: .84rem; }
+.copybox { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; white-space: pre-wrap; font-size: .9rem; }
+.copyrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 6px; }
+.copyrow h4 { margin: 0; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .9rem; }
+.hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hist li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; font-size: .84rem; align-items: center; }
+.hist .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: .78rem; }
+.hist .s { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist .d { color: var(--muted); font-size: .76rem; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <h1>Opsis Virality Prediktor</h1>
+    <p>Uploadaj video, dodaj opis i hashtagove. Dobit ćeš procjenu viralnosti i konkretne savjete za TikTok, Reels ili Shorts.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel stack" aria-labelledby="in-h">
+    <h2 id="in-h">Video za provjeru</h2>
+
+    <div>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Odaberi video">
+        <strong>Povuci video ovdje</strong>
+        <span>ili klikni za odabir (MP4, MOV, WebM)</span>
+        <span class="fname" id="fname" hidden></span>
+      </div>
+      <input type="file" id="file" accept="video/*" hidden>
+    </div>
+    <video class="preview" id="preview" controls playsinline muted hidden></video>
+
+    <div>
+      <span class="lbl" id="plat-l">Platforma</span>
+      <div class="seg" role="radiogroup" aria-labelledby="plat-l">
+        <input type="radio" name="plat" id="p-tt" value="tiktok" checked><label for="p-tt">TikTok</label>
+        <input type="radio" name="plat" id="p-ig" value="reels"><label for="p-ig">Reels</label>
+        <input type="radio" name="plat" id="p-yt" value="shorts"><label for="p-yt">Shorts</label>
+      </div>
+    </div>
+
+    <div>
+      <label class="lbl" for="topic">Tema videa</label>
+      <select id="topic">
+        <option>Plaže i more</option>
+        <option>Gradovi i stari dijelovi (Split, Trogir, Šibenik…)</option>
+        <option>Otoci i izleti brodom</option>
+        <option>Hrana, konobe i vino</option>
+        <option>Priroda (NP Krka, Biokovo, Cetina…)</option>
+        <option>Povijest, tradicija i običaji</option>
+        <option>Lifestyle i ljudi iz Dalmacije</option>
+        <option>Događaj, fešta ili koncert</option>
+        <option>Humor i trendovi</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="lbl" for="caption">Opis (caption)</label>
+      <textarea id="caption" placeholder="Npr. Ova uvala kod Trogira je prazna i u kolovozu 👀 Spremi za ljeto!"></textarea>
+    </div>
+
+    <div>
+      <label class="lbl" for="tags">Hashtagovi</label>
+      <input type="text" id="tags" placeholder="#dalmacija #trogir #croatia #travel">
+    </div>
+
+    <button class="btn" id="go" disabled>Analiziraj video</button>
+    <div class="stack" id="prog" hidden>
+      <div class="progress"><div id="bar"></div></div>
+      <div class="status"><span id="stxt">Pripremam…</span><button class="btn ghost" id="stop" hidden>Zaustavi AI</button></div>
+    </div>
+    <p class="err" id="err" hidden></p>
+    <p class="note" id="ainote">Video se obrađuje u tvom pregledniku. Claude dobiva samo nekoliko kadrova i izmjerene podatke, a ne cijeli video.</p>
+  </section>
+
+  <section class="panel" id="out" aria-live="polite"></section>
+</main>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = String(text); return e; };
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const fmt = (n, d = 1) => Number(n).toLocaleString("hr-HR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  const PLATFORMS = {
+    tiktok: { name: "TikTok", ideal: [15, 45], ok: [7, 90] },
+    reels: { name: "Instagram Reels", ideal: [7, 30], ok: [5, 90] },
+    shorts: { name: "YouTube Shorts", ideal: [15, 50], ok: [10, 60] },
+  };
+  const LOCAL_TAGS = ["#dalmacija", "#dalmatia", "#croatia", "#hrvatska", "#split", "#trogir", "#hvar", "#brac", "#brač", "#makarska", "#sibenik", "#šibenik", "#zadar", "#dubrovnik", "#adriatic", "#jadran", "#visitcroatia", "#croatiafullofcharacter", "#krka", "#omis", "#omiš", "#vis", "#korcula", "#korčula", "#primosten", "#primošten"];
+
+  const state = { file: null, url: null, sample: null, limits: null, running: false, ctl: null, frameUrls: [] };
+
+  // ---------- Claude (sample capability) ----------
+  (async () => {
+    try {
+      const s = window.claude && window.claude.use ? await window.claude.use("sample") : null;
+      if (s) { state.sample = s; state.limits = await s.limits().catch(() => null); }
+    } catch (_) {}
+    if (!state.sample) $("#ainote").textContent = "Video se obrađuje u tvom pregledniku. AI analiza kadrova radi kad stranicu otvoriš na claude.ai; ovdje dobivaš tehničku procjenu.";
+  })();
+
+  // ---------- input ----------
+  const drop = $("#drop"), fileIn = $("#file");
+  drop.addEventListener("click", () => fileIn.click());
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  fileIn.addEventListener("change", () => { if (fileIn.files[0]) setFile(fileIn.files[0]); });
+
+  function setFile(f) {
+    hideErr();
+    if (!f.type.startsWith("video/") && !/\.(mp4|mov|webm|m4v|mkv)$/i.test(f.name)) { showErr("Ova datoteka nije video. Odaberi MP4, MOV ili WebM."); return; }
+    if (state.url) URL.revokeObjectURL(state.url);
+    state.file = f; state.url = URL.createObjectURL(f);
+    const fn = $("#fname"); fn.hidden = false; fn.textContent = f.name + " · " + fmt(f.size / 1e6) + " MB";
+    const pv = $("#preview"); pv.src = state.url; pv.hidden = false;
+    $("#go").disabled = false;
+  }
+  function showErr(t) { const e = $("#err"); e.textContent = t; e.hidden = false; }
+  function hideErr() { $("#err").hidden = true; }
+  function progress(text, frac) { $("#prog").hidden = false; $("#stxt").textContent = text; if (frac != null) $("#bar").style.width = Math.round(frac * 100) + "%"; }
+
+  $("#go").addEventListener("click", () => { if (!state.running && state.file) run(); });
+  $("#stop").addEventListener("click", () => state.ctl && state.ctl.abort());
+
+  // ---------- video analysis ----------
+  function loadVideo(url) {
+    return new Promise((res, rej) => {
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+      const t = setTimeout(() => rej(new Error("timeout")), 20000);
+      v.addEventListener("loadeddata", () => { clearTimeout(t); res(v); }, { once: true });
+      v.addEventListener("error", () => { clearTimeout(t); rej(new Error("decode")); }, { once: true });
+    });
+  }
+  function seek(v, t) {
+    return new Promise((res) => {
+      const done = () => { v.removeEventListener("seeked", done); clearTimeout(to); res(); };
+      const to = setTimeout(done, 3000);
+      v.addEventListener("seeked", done);
+      v.currentTime = t;
+    });
+  }
+  const toBlob = (c) => new Promise((r) => c.toBlob(r, "image/jpeg", 0.82));
+
+  async function analyzeVideo(v) {
+    const dur = v.duration, vw = v.videoWidth, vh = v.videoHeight;
+    if (!isFinite(dur) || dur <= 0 || !vw) throw new Error("meta");
+    const step = Math.min(1, Math.max(0.2, dur / 150));
+    const times = []; for (let t = 0.05; t < dur - 0.05; t += step) times.push(t);
+    const sw = 80, sh = Math.max(8, Math.min(180, Math.round(80 * vh / vw)));
+    const c = document.createElement("canvas"); c.width = sw; c.height = sh;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const samples = []; let prev = null;
+    for (let i = 0; i < times.length; i++) {
+      await seek(v, times[i]);
+      ctx.drawImage(v, 0, 0, sw, sh);
+      const d = ctx.getImageData(0, 0, sw, sh).data, n = sw * sh, lum = new Float32Array(n);
+      let ls = 0, ss = 0, diff = 0;
+      for (let p = 0, j = 0; p < n; p++, j += 4) {
+        const r = d[j], g = d[j + 1], b = d[j + 2];
+        const L = 0.299 * r + 0.587 * g + 0.114 * b; lum[p] = L; ls += L;
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b); ss += mx ? (mx - mn) / mx : 0;
+        if (prev) diff += Math.abs(L - prev[p]);
+      }
+      samples.push({ t: times[i], lum: ls / n / 255, sat: ss / n, diff: prev ? diff / n : 0 });
+      prev = lum;
+      if (i % 3 === 0) progress("Čitam kadrove… " + (i + 1) + "/" + times.length, 0.05 + 0.6 * (i / times.length));
+    }
+    // cuts
+    const diffs = samples.slice(1).map((s) => s.diff).sort((a, b) => a - b);
+    const med = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0;
+    const thr = Math.max(24, med * 3);
+    const cuts = samples.filter((s, i) => i > 0 && s.diff > thr).map((s) => s.t);
+    // keyframes
+    const maxImg = Math.min(8, state.limits && state.limits.images ? state.limits.images.maxCount : 8);
+    const kt = [0.1, 1, 2.5].filter((t) => t < dur);
+    const rest = Math.max(0, maxImg - kt.length);
+    for (let i = 1; i <= rest; i++) { const t = 3 + (dur - 3.2) * i / rest; if (t > 3 && t < dur) kt.push(t); }
+    const big = document.createElement("canvas"); const sc = Math.min(1, 768 / Math.max(vw, vh));
+    big.width = Math.round(vw * sc); big.height = Math.round(vh * sc);
+    const bctx = big.getContext("2d"); const frames = [];
+    for (let i = 0; i < kt.length; i++) {
+      progress("Izdvajam ključne kadrove…", 0.66 + 0.1 * (i / kt.length));
+      await seek(v, kt[i]); bctx.drawImage(v, 0, 0, big.width, big.height);
+      const b = await toBlob(big); if (b) frames.push({ t: kt[i], blob: b });
+    }
+    return { dur, vw, vh, samples, cuts, frames };
+  }
+
+  async function analyzeAudio(file) {
+    if (file.size > 300e6) return { status: "skipped" };
+    const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!AC) return { status: "unknown" };
+    const buf = await file.arrayBuffer();
+    let ab;
+    try { ab = await new AC(1, 44100, 44100).decodeAudioData(buf); } catch (_) { return { status: "none" }; }
+    const ch = ab.getChannelData(0), sr = ab.sampleRate, win = Math.round(sr / 10);
+    let tot = 0, silent = 0, wins = 0, first = 0, firstN = 0;
+    for (let i = 0; i < ch.length; i += win) {
+      let s = 0; const end = Math.min(ch.length, i + win);
+      for (let j = i; j < end; j++) s += ch[j] * ch[j];
+      tot += s; const rms = Math.sqrt(s / (end - i)); const db = 20 * Math.log10(rms + 1e-9);
+      if (db < -45) silent++; wins++;
+      if (i < sr) { first += s; firstN += end - i; }
+    }
+    const meanDb = 20 * Math.log10(Math.sqrt(tot / ch.length) + 1e-9);
+    const firstDb = 20 * Math.log10(Math.sqrt(first / Math.max(1, firstN)) + 1e-9);
+    if (meanDb < -60) return { status: "silent", meanDb, firstDb, silence: 1 };
+    return { status: "ok", meanDb, firstDb, silence: silent / Math.max(1, wins) };
+  }
+
+  function analyzeText(caption, tagsIn) {
+    const all = [...(caption.match(/#[\p{L}\p{N}_]+/gu) || []), ...tagsIn.split(/[\s,]+/).filter(Boolean).map((t) => (t.startsWith("#") ? t : "#" + t))];
+    const tags = [...new Set(all.map((t) => t.toLowerCase()))];
+    const firstLine = (caption.trim().split("\n")[0] || "").replace(/#[\p{L}\p{N}_]+/gu, "").trim();
+    return {
+      len: caption.trim().length, firstLine, tags,
+      hook: firstLine.length > 0 && firstLine.length <= 90 && /[?!]|\d|kako|zašto|zasto|tajn|najljep|skriven|nitko|morate|moraš|ne znaš|how|why|secret|hidden|best|pov/i.test(firstLine),
+      cta: /spremi|podijeli|komentiraj|prati|označi|oznaci|tagaj|pošalji|posalji|napiši|napisi|save|share|comment|follow|\btag\b|link u bio/i.test(caption),
+      local: tags.filter((t) => LOCAL_TAGS.includes(t)),
+    };
+  }
+
+  // ---------- scoring ----------
+  function scoreTech(m, audio, text, platKey) {
+    const P = PLATFORMS[platKey], parts = [], tips = [];
+    const add = (key, label, score, max, detail) => parts.push({ key, label, score: Math.round(score * 10) / 10, max, detail });
+    const tip = (p, t) => tips.push({ priority: p, tip: t });
+    const { dur, vw, vh, samples, cuts } = m;
+
+    // format
+    const ratio = vw / vh; let f = ratio < 0.6 && ratio > 0.53 ? 7 : ratio < 0.85 ? 4 : 1;
+    const short = Math.min(vw, vh); f += short >= 1080 ? 3 : short >= 720 ? 2 : 0;
+    add("format", "Format i kvaliteta", f, 10, vw + "×" + vh + (ratio < 0.6 && ratio > 0.53 ? " · 9:16" : ratio < 0.85 ? " · nije 9:16" : " · horizontalno"));
+    if (ratio >= 0.85) tip("visok", "Video je horizontalan. Izreži ga na 9:16 (1080×1920) da zauzme cijeli ekran.");
+    else if (ratio >= 0.6) tip("srednji", "Format nije pun 9:16. Vertikalni 1080×1920 dobiva više prostora na ekranu.");
+    if (short < 1080) tip("nizak", "Rezolucija je ispod 1080p. Izvezi u 1080×1920 da more i nebo ne izgledaju mutno.");
+
+    // duration
+    const dS = dur >= P.ideal[0] && dur <= P.ideal[1] ? 15 : dur >= P.ok[0] && dur <= P.ok[1] ? 9 : 3;
+    add("dur", "Trajanje", dS, 15, fmt(dur) + " s · idealno " + P.ideal[0] + "–" + P.ideal[1] + " s za " + P.name);
+    if (dS < 15) tip(dS === 3 ? "visok" : "srednji", dur > P.ideal[1] ? "Skrati video na " + P.ideal[0] + "–" + P.ideal[1] + " s. Kraći video lakše odgledaju do kraja, a to algoritam nagrađuje." : "Video je jako kratak. Ciljaj " + P.ideal[0] + "–" + P.ideal[1] + " s da stigneš ispričati mini priču.");
+
+    // hook (first 3 s)
+    const all = samples.slice(1), mAll = all.reduce((a, s) => a + s.diff, 0) / Math.max(1, all.length);
+    const h3 = all.filter((s) => s.t < 3), m3 = h3.reduce((a, s) => a + s.diff, 0) / Math.max(1, h3.length);
+    const rel = mAll ? m3 / mAll : 0;
+    let hk = m3 < 3 ? 2 : rel >= 1 ? 8 : rel >= 0.7 ? 5 : 2;
+    const sorted = all.map((s) => s.diff).sort((a, b) => a - b), med = sorted[Math.floor(sorted.length / 2)] || 0;
+    const firstChange = (all.find((s) => s.diff > Math.max(12, med * 2)) || {}).t;
+    hk += firstChange != null && firstChange <= 1.5 ? 7 : firstChange != null && firstChange <= 3 ? 4 : 1;
+    const fl = samples[0] ? samples[0].lum : 0.5; hk += fl > 0.2 && fl < 0.85 ? 5 : 2;
+    hk += audio.status === "ok" ? (audio.firstDb > -35 ? 5 : 2) : audio.status === "none" || audio.status === "silent" ? 0 : 3;
+    add("hook", "Hook (prve 3 s)", hk, 25, "pokret u prve 3 s: " + Math.round(rel * 100) + "% prosjeka" + (firstChange != null ? " · prva promjena na " + fmt(firstChange) + " s" : " · bez promjene kadra"));
+    if (hk < 18) tip("visok", "Prve 3 sekunde su premirne. Kreni s najjačim kadrom (skok u more, dron nad otokom, pogled koji iznenadi) i reži već unutar 1,5 s.");
+    if (fl <= 0.2) tip("srednji", "Prvi kadar je pretaman. Odaberi svjetliji početni kadar jer on služi i kao naslovna slika.");
+    if (audio.status === "ok" && audio.firstDb <= -35) tip("srednji", "Zvuk na početku je pretih. Neka glazba ili glas krenu od prve sekunde.");
+
+    // pacing
+    const cp10 = cuts.length / dur * 10;
+    let pc = cp10 >= 1.5 && cp10 <= 6 ? 10 : (cp10 >= 0.8 && cp10 < 1.5) || (cp10 > 6 && cp10 <= 9) ? 6 : 3;
+    pc += mAll >= 4 && mAll <= 25 ? 5 : 2;
+    add("pace", "Tempo i montaža", pc, 15, cuts.length + " rezova · " + fmt(cp10) + " na 10 s");
+    if (cp10 < 1.5) tip("srednji", "Malo rezova (" + fmt(cp10) + " na 10 s). Za Dalmaciju dobro radi 2–5 rezova na 10 s, po mogućnosti u ritmu glazbe.");
+    if (cp10 > 9) tip("nizak", "Montaža je jako brza. Pusti ključne kadrove (zalazak, more) da traju barem sekundu.");
+
+    // visuals
+    const bl = samples.reduce((a, s) => a + s.lum, 0) / samples.length, sa = samples.reduce((a, s) => a + s.sat, 0) / samples.length;
+    let vs = bl >= 0.35 && bl <= 0.72 ? 5 : bl >= 0.25 && bl <= 0.82 ? 3 : 1; vs += sa > 0.28 ? 5 : sa > 0.18 ? 3 : 1;
+    add("vis", "Svjetlo i boje", vs, 10, "svjetlina " + Math.round(bl * 100) + "% · zasićenost " + Math.round(sa * 100) + "%");
+    if (bl < 0.35) tip("srednji", "Video je taman. Podigni ekspoziciju ili snimaj u zlatnom satu.");
+    if (bl > 0.72) tip("nizak", "Kadrovi su presvijetli (podnevno sunce). Spusti highlights da more ostane plavo.");
+    if (sa <= 0.18) tip("nizak", "Boje su blijede. Malo zasićenosti i topline istakne tirkizno more i kamen.");
+
+    // audio
+    let au;
+    if (audio.status === "ok") au = (audio.meanDb > -30 ? 6 : 3) + (audio.silence < 0.15 ? 4 : 2);
+    else if (audio.status === "none" || audio.status === "silent") au = 1;
+    else au = 5;
+    add("aud", "Zvuk", au, 10, audio.status === "ok" ? "glasnoća " + fmt(audio.meanDb, 0) + " dB · tišina " + Math.round(audio.silence * 100) + "%" : audio.status === "none" ? "zvuk nije pronađen ili ga preglednik ne može pročitati" : audio.status === "silent" ? "video je bez zvuka" : "zvuk nije provjeren");
+    if (audio.status === "none" || audio.status === "silent") tip("visok", "Video nema zvuk. Dodaj trending zvuk ili glazbu u aplikaciji platforme, to znatno pomaže dosegu.");
+    else if (audio.status === "ok" && audio.silence >= 0.15) tip("nizak", "Ima dosta tihih dijelova. Popuni ih glazbom ili ambijentom (valovi, cvrčci).");
+
+    // caption
+    let cs = (text.len >= 20 ? 3 : 0) + (text.hook ? 4 : 0) + (text.cta ? 3 : 0);
+    const nt = text.tags.length; cs += nt >= 3 && nt <= 8 ? 3 : nt > 0 && nt <= 15 ? 1.5 : 0; cs += text.local.length ? 2 : 0;
+    add("cap", "Opis i hashtagovi", cs, 15, (text.len ? text.len + " znakova" : "bez opisa") + " · " + nt + " hashtagova" + (text.local.length ? " · lokalni: " + text.local.slice(0, 3).join(" ") : ""));
+    if (!text.hook) tip("srednji", "Prvi red opisa nema hook. Probaj pitanje ili obećanje, npr. „Uvala koju turisti još nisu otkrili 👀“.");
+    if (!text.cta) tip("nizak", "Dodaj poziv na akciju: „Spremi za ljeto“ ili „Označi s kim ideš“. Spremanja i dijeljenja jako pomažu.");
+    if (nt < 3 || nt > 8) tip("nizak", "Koristi 3–8 hashtagova: 1–2 široka (#croatia), 2–3 lokalna (#trogir #dalmacija) i 1–2 tematska (#beach).");
+    else if (!text.local.length) tip("nizak", "Dodaj barem jedan lokalni hashtag (#dalmacija, #split, #hvar…) da te nađu ljudi koji planiraju putovanje.");
+
+    const total = Math.round(parts.reduce((a, p) => a + p.score, 0));
+    const order = { visok: 0, srednji: 1, nizak: 2 };
+    tips.sort((a, b) => order[a.priority] - order[b.priority]);
+    return { total, parts, tips, mAll, m3, cp10, bl, sa, firstChange };
+  }
+
+  // ---------- AI ----------
+  async function runAi(ctx) {
+    const { m, tech, audio, text, platKey, topic, caption } = ctx;
+    const P = PLATFORMS[platKey];
+    const frames = m.frames.slice(0, state.limits && state.limits.images ? state.limits.images.maxCount : 8);
+    const prompt = [
+      "Ti si iskusan strateg za kratke vertikalne videe (TikTok, Instagram Reels, YouTube Shorts). Analiziraš video za Opsis Dalmatia, profil koji objavljuje video sadržaj iz Dalmacije.",
+      "",
+      "Platforma: " + P.name,
+      "Tema: " + topic,
+      'Opis (caption): """' + (caption.trim() || "(nema opisa)") + '"""',
+      "Hashtagovi: " + (text.tags.join(" ") || "(nema)"),
+      "",
+      "Izmjereno u pregledniku:",
+      "- trajanje " + m.dur.toFixed(1) + " s, rezolucija " + m.vw + "x" + m.vh,
+      "- " + m.cuts.length + " rezova (" + tech.cp10.toFixed(1) + " na 10 s)" + (tech.firstChange != null ? ", prva veća promjena kadra na " + tech.firstChange.toFixed(1) + " s" : ", nema velike promjene kadra"),
+      "- pokret u prve 3 s je " + Math.round((tech.m3 / (tech.mAll || 1)) * 100) + "% prosjeka cijelog videa",
+      "- prosječna svjetlina " + Math.round(tech.bl * 100) + "%, zasićenost " + Math.round(tech.sa * 100) + "%",
+      "- zvuk: " + (audio.status === "ok" ? "prisutan, prosječno " + audio.meanDb.toFixed(0) + " dBFS, prva sekunda " + audio.firstDb.toFixed(0) + " dBFS" : audio.status === "none" || audio.status === "silent" ? "nema zvuka" : "nije provjeren"),
+      "- tehnička ocjena (heuristika): " + tech.total + "/100",
+      "",
+      "Priloženo je " + frames.length + " kadrova iz videa, redom, na vremenima: " + frames.map((f) => f.t.toFixed(1) + " s").join(", ") + ".",
+      "",
+      "Procijeni potencijal viralnosti realno i nemoj napuhavati ocjenu. Gledaj: hook u prvih 1–3 s (je li odmah jasno što gledamo i zašto ostati), radoznalost i emociju, autentičnost Dalmacije u odnosu na generički turistički sadržaj, zadržavanje do kraja i ponovno gledanje, te potencijal za spremanje i dijeljenje. Savjeti moraju biti konkretni za ovaj video i izvedivi u montaži ili kod sljedećeg snimanja.",
+      "",
+      "Odgovori samo JSON objektom, na hrvatskom, ovog oblika:",
+      '{"score": cijeli broj 0-100, "verdict": "jedna rečenica", "hook": {"score": 0-10, "comment": "..."}, "retention": {"score": 0-10, "comment": "..."}, "shareability": {"score": 0-10, "comment": "..."}, "strengths": ["..."], "improvements": [{"priority": "visok|srednji|nizak", "tip": "..."}], "on_screen_text": "prijedlog teksta na ekranu za prve 2 s", "caption": "prijedlog novog opisa s hookom i pozivom na akciju", "hashtags": ["#..."], "best_time": "kada objaviti i zašto"}',
+      "Najviše 4 strengths, 6 improvements i 8 hashtagova.",
+    ].join("\n");
+    state.ctl = new AbortController();
+    $("#stop").hidden = false;
+    progress("Claude gleda kadrove… (obično 20–60 s)", 0.85);
+    try {
+      const r = await state.sample.json(prompt, { images: frames.map((f) => f.blob), signal: state.ctl.signal });
+      if (!r || typeof r.score !== "number") throw { code: "invalid_json" };
+      r.score = Math.max(0, Math.min(100, Math.round(r.score)));
+      return r;
+    } catch (e) {
+      const msg = {
+        cancelled: "AI analiza je zaustavljena. Prikazana je tehnička procjena.",
+        not_granted: "AI analiza nije dopuštena. Prikazana je tehnička procjena.",
+        rate_limited: "Dosegnut je limit korištenja Claudea. Pokušaj ponovno kasnije.",
+        image_rejected: "Kadrove nije bilo moguće poslati. Prikazana je tehnička procjena.",
+        images_unavailable: "Slanje slika ovdje nije dostupno. Prikazana je tehnička procjena.",
+        invalid_json: "AI odgovor nije bio ispravan. Klikni Analiziraj ponovno.",
+        refused: "Claude nije htio analizirati ovaj video. Prikazana je tehnička procjena.",
+      }[e && e.code] || "AI analiza nije uspjela. Klikni Analiziraj ponovno.";
+      return { error: msg };
+    } finally { $("#stop").hidden = true; state.ctl = null; }
+  }
+
+  // ---------- run ----------
+  async function run() {
+    state.running = true; $("#go").disabled = true; hideErr();
+    try {
+      progress("Otvaram video…", 0.02);
+      let v;
+      try { v = await loadVideo(state.url); } catch (_) { throw new Error("Preglednik ne može otvoriti ovaj video. Izvezi ga kao MP4 (H.264) i pokušaj ponovno."); }
+      const m = await analyzeVideo(v);
+      progress("Analiziram zvuk…", 0.78);
+      const audio = await analyzeAudio(state.file).catch(() => ({ status: "unknown" }));
+      const platKey = document.querySelector('input[name="plat"]:checked').value;
+      const caption = $("#caption").value, topic = $("#topic").value;
+      const text = analyzeText(caption, $("#tags").value);
+      const tech = scoreTech(m, audio, text, platKey);
+      state.frameUrls.forEach((u) => URL.revokeObjectURL(u));
+      state.frameUrls = m.frames.map((f) => URL.createObjectURL(f.blob));
+      const result = { example: false, name: state.file.name, platKey, topic, m, tech, ai: null, frameUrls: state.frameUrls };
+      result.pending = !!(state.sample && m.frames.length);
+      render(result);
+      if (result.pending) {
+        result.ai = await runAi({ m, tech, audio, text, platKey, topic, caption });
+        result.pending = false;
+      }
+      saveHistory(result);
+      render(result);
+      progress("Gotovo.", 1);
+    } catch (e) {
+      showErr(e && e.message && e.message.length > 12 ? e.message : "Analiza nije uspjela. Pokušaj s drugim videom ili MP4 formatom.");
+      $("#prog").hidden = true;
+    } finally { state.running = false; $("#go").disabled = !state.file; }
+  }
+
+  // ---------- history ----------
+  const HK = "opsis-viral-history";
+  function loadHistory() { try { return JSON.parse(localStorage.getItem(HK) || "[]"); } catch (_) { return []; } }
+  function saveHistory(r) {
+    try {
+      const h = loadHistory();
+      h.unshift({ name: r.name, plat: PLATFORMS[r.platKey].name, score: finalScore(r), date: new Date().toISOString() });
+      localStorage.setItem(HK, JSON.stringify(h.slice(0, 12)));
+    } catch (_) {}
+  }
+
+  // ---------- render ----------
+  const finalScore = (r) => (r.ai && !r.ai.error ? Math.round(0.6 * r.ai.score + 0.4 * r.tech.total) : r.tech.total);
+  const band = (s) => (s >= 80 ? ["Jak potencijal", "good"] : s >= 65 ? ["Dobar potencijal", "good"] : s >= 45 ? ["Prosječan potencijal", "warn"] : ["Slab potencijal", "bad"]);
+  const cls = (f) => (f >= 0.75 ? "good" : f >= 0.5 ? "warn" : "bad");
+
+  function render(r) {
+    const out = $("#out"); out.textContent = "";
+    if (r.example) out.append(el("div", "banner", "Primjer analize s izmišljenim podacima. Uploadaj svoj video lijevo za pravu procjenu."));
+    const score = finalScore(r), [bname, bcls] = band(score);
+
+    // summary
+    const sum = el("div", "summary");
+    const dial = el("div", "dial");
+    const s = svg("svg", { viewBox: "0 0 120 120", "aria-hidden": "true" });
+    s.append(svg("circle", { cx: 60, cy: 60, r: 52, fill: "none", stroke: "var(--sea-soft)", "stroke-width": 12 }));
+    const C = 2 * Math.PI * 52;
+    s.append(svg("circle", { cx: 60, cy: 60, r: 52, fill: "none", stroke: "var(--" + bcls + ")", "stroke-width": 12, "stroke-linecap": "round", "stroke-dasharray": (C * score / 100) + " " + C }));
+    dial.append(s);
+    const num = el("div", "num"); const inner = el("div", null, score); inner.append(el("small", null, "od 100")); num.append(inner); dial.append(num);
+    sum.append(dial);
+    const vd = el("div", "verdict");
+    vd.append(el("h3", null, bname));
+    vd.append(el("p", null, r.ai && !r.ai.error ? r.ai.verdict : r.ai && r.ai.error ? r.ai.error : r.pending ? "Tehnička procjena je gotova. Claude još gleda kadrove." : "Tehnička procjena iz izmjerenih podataka videa i opisa."));
+    const chips = el("div", "chips");
+    const chip = (k, v) => { const c = el("span", "chip", k + " "); c.append(el("b", null, v)); chips.append(c); };
+    chip("tehnička", r.tech.total);
+    if (r.ai && !r.ai.error) chip("AI", r.ai.score);
+    chip("platforma", PLATFORMS[r.platKey].name);
+    chip("trajanje", fmt(r.m.dur) + " s");
+    vd.append(chips);
+    sum.append(vd);
+    out.append(sum);
+    out.append(el("p", "note", "Ukupna ocjena = 60% AI procjena sadržaja + 40% tehnička procjena. Nijedan alat ne može zajamčiti viralnost; koristi ovo za usporedbu verzija i popravke prije objave."));
+
+    // AI trio
+    if (r.ai && !r.ai.error) {
+      const sec = el("div", "section"); sec.append(el("h4", null, "Claude o sadržaju"));
+      const trio = el("div", "trio");
+      [["Hook", r.ai.hook], ["Zadržavanje", r.ai.retention], ["Dijeljenje", r.ai.shareability]].forEach(([k, o]) => {
+        if (!o) return; const d = el("div"); d.append(el("div", "k", k)); d.append(el("div", "v", Math.round(Number(o.score) || 0) + "/10")); d.append(el("p", null, o.comment || "")); trio.append(d);
+      });
+      sec.append(trio); out.append(sec);
+    }
+
+    // tips
+    const tips = r.ai && !r.ai.error && Array.isArray(r.ai.improvements) && r.ai.improvements.length ? r.ai.improvements : r.tech.tips;
+    if (tips.length) {
+      const sec = el("div", "section"); sec.append(el("h4", null, "Što popraviti"));
+      const ul = el("ul", "tips");
+      tips.slice(0, 7).forEach((t) => { const p = ["visok", "srednji", "nizak"].includes(t.priority) ? t.priority : "srednji"; const li = el("li"); li.append(el("span", "pill " + p, p)); li.append(el("span", null, t.tip)); ul.append(li); });
+      sec.append(ul); out.append(sec);
+    }
+    if (r.ai && !r.ai.error && Array.isArray(r.ai.strengths) && r.ai.strengths.length) {
+      const sec = el("div", "section"); sec.append(el("h4", null, "Što već radi"));
+      const ul = el("ul", "plain"); r.ai.strengths.forEach((t) => ul.append(el("li", null, t))); sec.append(ul); out.append(sec);
+    }
+
+    // suggestions
+    if (r.ai && !r.ai.error) {
+      const block = (title, body) => {
+        if (!body) return; const sec = el("div", "section"); const row = el("div", "copyrow"); row.append(el("h4", null, title));
+        const b = el("button", "btn ghost", "Kopiraj"); b.type = "button";
+        const box = el("div", "copybox", body);
+        b.addEventListener("click", async () => { try { await navigator.clipboard.writeText(body); b.textContent = "Kopirano"; } catch (_) { const sel = getSelection(); const rg = document.createRange(); rg.selectNodeContents(box); sel.removeAllRanges(); sel.addRange(rg); b.textContent = "Označeno, kopiraj ručno"; } setTimeout(() => (b.textContent = "Kopiraj"), 2000); });
+        row.append(b); sec.append(row); sec.append(box); out.append(sec);
+      };
+      block("Tekst na ekranu (prve 2 s)", r.ai.on_screen_text);
+      block("Prijedlog opisa", r.ai.caption);
+      block("Hashtagovi", Array.isArray(r.ai.hashtags) ? r.ai.hashtags.join(" ") : "");
+      if (r.ai.best_time) { const sec = el("div", "section"); sec.append(el("h4", null, "Kada objaviti")); sec.append(el("p", null, r.ai.best_time)); out.append(sec); }
+    }
+
+    // breakdown
+    const bs = el("div", "section"); bs.append(el("h4", null, "Tehnička procjena po dijelovima"));
+    const bars = el("div", "bars");
+    r.tech.parts.forEach((p) => {
+      const b = el("div", "bar"); b.append(el("span", null, p.label));
+      const tr = el("div", "track"); const fl = el("div", "fill " + cls(p.score / p.max)); fl.style.width = (p.score / p.max * 100) + "%"; tr.append(fl); b.append(tr);
+      b.append(el("span", "val", fmt(p.score, p.score % 1 ? 1 : 0) + "/" + p.max)); b.append(el("span", "det", p.detail)); bars.append(b);
+    });
+    bs.append(bars); out.append(bs);
+
+    // timeline
+    const ts = el("div", "section"); ts.append(el("h4", null, "Pokret i rezovi kroz video"));
+    const W = 600, H = 120, top = 10, bot = 100, dur = r.m.dur;
+    const x = (t) => (t / dur) * W;
+    const maxD = Math.max(1, ...r.m.samples.map((q) => q.diff));
+    const y = (d) => bot - (d / maxD) * (bot - top - 8);
+    const tl = svg("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Graf pokreta kroz video s označenim rezovima" });
+    tl.append(svg("rect", { class: "hook", x: 0, y: top, width: x(Math.min(3, dur)), height: bot - top }));
+    let d = "M0 " + bot; r.m.samples.forEach((q) => (d += " L" + x(q.t).toFixed(1) + " " + y(q.diff).toFixed(1))); d += " L" + x(r.m.samples[r.m.samples.length - 1].t).toFixed(1) + " " + bot + " Z";
+    tl.append(svg("path", { class: "area", d }));
+    r.m.cuts.forEach((c) => tl.append(svg("line", { class: "cut", x1: x(c), x2: x(c), y1: top, y2: top + 10 })));
+    tl.append(svg("line", { class: "base", x1: 0, x2: W, y1: bot, y2: bot }));
+    const ticks = [0, dur / 2, dur];
+    ticks.forEach((t, i) => { const tx = svg("text", { class: "axis", x: i === 0 ? 2 : i === 2 ? W - 2 : x(t), y: H - 4, "text-anchor": i === 0 ? "start" : i === 2 ? "end" : "middle" }); tx.textContent = fmt(t) + " s"; tl.append(tx); });
+    const tw = el("div", "timeline"); tw.append(tl); ts.append(tw);
+    const lg = el("div", "legend");
+    [["var(--sea)", "količina pokreta"], ["var(--warn)", "zona hooka (0–3 s)"], ["var(--ink)", "rez"]].forEach(([c, t]) => { const s2 = el("span"); const i = el("i"); i.style.background = c; s2.append(i); s2.append(document.createTextNode(t)); lg.append(s2); });
+    ts.append(lg); out.append(ts);
+
+    // frames
+    if (r.frameUrls && r.frameUrls.length) {
+      const fs = el("div", "section"); fs.append(el("h4", null, r.ai && !r.ai.error ? "Kadrovi koje je Claude vidio" : "Ključni kadrovi"));
+      const fr = el("div", "frames");
+      r.m.frames.forEach((f, i) => { const fg = el("figure"); const im = el("img"); im.src = r.frameUrls[i]; im.alt = "Kadar na " + fmt(f.t) + " s"; fg.append(im); fg.append(el("figcaption", null, fmt(f.t) + " s")); fr.append(fg); });
+      fs.append(fr); out.append(fs);
+    }
+
+    // history
+    const h = loadHistory();
+    if (h.length) {
+      const hs = el("div", "section"); hs.append(el("h4", null, "Prethodne analize na ovom uređaju"));
+      const ul = el("ul", "hist");
+      h.forEach((it) => { const li = el("li"); li.append(el("span", "n", it.name)); li.append(el("span", "d", it.plat + " · " + new Date(it.date).toLocaleDateString("hr-HR"))); li.append(el("span", "s", it.score)); ul.append(li); });
+      hs.append(ul); out.append(hs);
+    }
+  }
+
+  // ---------- example on load ----------
+  (function example() {
+    const dur = 23.4, samples = [];
+    for (let t = 0.05; t < dur; t += 0.2) samples.push({ t, lum: 0.55, sat: 0.34, diff: 6 + 5 * Math.abs(Math.sin(t * 1.3)) + (t < 3 ? 6 : 0) });
+    const cuts = [1.2, 3.4, 5.1, 7.9, 9.6, 12.2, 14.8, 17.0, 19.5, 21.6];
+    cuts.forEach((c) => { const s = samples.reduce((a, b) => (Math.abs(b.t - c) < Math.abs(a.t - c) ? b : a)); s.diff = 38; });
+    const tech = {
+      total: 74, cp10: 4.3, tips: [],
+      parts: [
+        { label: "Format i kvaliteta", score: 10, max: 10, detail: "1080×1920 · 9:16" },
+        { label: "Trajanje", score: 15, max: 15, detail: "23,4 s · idealno 15–45 s za TikTok" },
+        { label: "Hook (prve 3 s)", score: 18, max: 25, detail: "pokret u prve 3 s: 132% prosjeka · prva promjena na 1,2 s" },
+        { label: "Tempo i montaža", score: 15, max: 15, detail: "10 rezova · 4,3 na 10 s" },
+        { label: "Svjetlo i boje", score: 10, max: 10, detail: "svjetlina 55% · zasićenost 34%" },
+        { label: "Zvuk", score: 6, max: 10, detail: "glasnoća -24 dB · tišina 18%" },
+      ],
+    };
+    tech.parts.push({ label: "Opis i hashtagovi", score: 0, max: 15, detail: "bez opisa · 0 hashtagova" });
+    render({
+      example: true, name: "primjer_trogir_uvala.mp4", platKey: "tiktok", m: { dur, samples, cuts, frames: [] }, tech, frameUrls: [],
+      ai: {
+        score: 71, verdict: "Lijepi kadrovi i dobar tempo, ali prve dvije sekunde ne govore gdje smo ni zašto ostati gledati.",
+        hook: { score: 6, comment: "Dron nad uvalom je lijep, ali generičan. Bez teksta na ekranu gledatelj ne zna što je posebno." },
+        retention: { score: 8, comment: "Rezovi prate glazbu i kadrovi se ne ponavljaju, pa video drži pažnju do kraja." },
+        shareability: { score: 6, comment: "Fali razlog za spremanje: ime mjesta, kako doći ili savjet koji se isplati zapamtiti." },
+        improvements: [
+          { priority: "visok", tip: "Dodaj tekst u prvoj sekundi: „Uvala kod Trogira koja je prazna i u kolovozu“." },
+          { priority: "visok", tip: "Napiši opis s pozivom na akciju i 4–6 hashtagova (#trogir #dalmacija #croatia #hiddenbeach)." },
+          { priority: "srednji", tip: "Završi kadrom koji se vraća na početak (loop) da se video gleda ponovno." },
+          { priority: "nizak", tip: "Popuni tihi dio oko 15. sekunde zvukom valova ili nastavkom glazbe." },
+        ],
+        strengths: ["Pun 9:16 u 1080p", "Tempo montaže prati ritam glazbe", "Boje mora su prirodne i zasićene"],
+        on_screen_text: "Uvala kod Trogira koja je prazna i u kolovozu 👀",
+        caption: "Nitko ne vjeruje da je ovo Dalmacija u kolovozu 🌊\nSpremi za ljeto i označi s kim ideš 👇",
+        hashtags: ["#trogir", "#dalmacija", "#croatia", "#hiddenbeach", "#adriatic", "#croatiatravel"],
+        best_time: "Radnim danom 19–21 h za domaću publiku. Za turiste koji planiraju ljeto dobro rade nedjelje navečer od veljače do svibnja.",
+      },
+    });
+  })();
+})();
+</script>
